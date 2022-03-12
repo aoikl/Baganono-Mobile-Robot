@@ -1,13 +1,11 @@
 /*====================
 
-      1.include
+    1.include
 
 ====================*/
 // Bluetooth
 #include <BluetoothSerial.h>
 BluetoothSerial BT;
-char* pin = "9420";
-char val;
 
 // OLED
 #include <Adafruit_GFX.h>
@@ -19,11 +17,11 @@ char val;
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 // IR sensor
-// const int sensor1 = 9;
+const int sensor1 = 9;
 const int sensor2 = 39;
-// const int sensor3 = 11;
+const int sensor3 = 11;
 const int sensor4 = 36;
-// const int sensor5 = 13;
+const int sensor5 = 13;
 
 /*====================
 
@@ -33,12 +31,9 @@ const int sensor4 = 36;
 void setup() {
     Serial.begin(115200);
     // Bluetooth
-    pinMode(LED_BUILTIN, OUTPUT);
-    BT.setPin(pin);
     BT.begin("BagaNono-Robot");
-    byte macBT[6];
-    esp_read_mac(macBT, ESP_MAC_BT);
-    Serial.printf("藍芽 MAC 位址：%02X:%02X;%02X;%02X;%02X;%02X;\n", macBT[0], macBT[1], macBT[2], macBT[3], macBT[4], macBT[5]);
+    BT.setPin("899819");
+    Serial.printf("BT initial ok and ready to pair. \r\n");
 
     // OLED
     if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {  // Address 0x3D for 128x64
@@ -51,37 +46,35 @@ void setup() {
     display.setTextSize(2);
     display.setTextColor(WHITE);
     display.setCursor(0, 10);
-    display.println("baganono basebase");
+    display.println("BagaNono BaseBase");
     display.display();
     delay(1000);
     // IR sensor
-    // pinMode(sensor1, INPUT);
+    pinMode(sensor1, INPUT);
     pinMode(sensor2, INPUT);
-    // pinMode(sensor3, INPUT);
+    pinMode(sensor3, INPUT);
     pinMode(sensor4, INPUT);
-    // pinMode(sensor5, INPUT);
+    pinMode(sensor5, INPUT);
 }
 
 void loop() {
     // Bluetooth
     if (BT.available()) {
-        val = BT.read();
-        switch (val) {
-            case '0':
+        switch (BT.read()) {
+            case 'a':
                 display.clearDisplay();
-                display.setTextSize(2);
-                display.setTextColor(WHITE);
                 display.setCursor(0, 10);
-                display.println("0000");
+                display.println("ModeAuto");
+                display.println("delay 1s");
                 display.display();
+                delay(1000);
+                
                 break;
 
-            case '1':
+            case 'A':
                 display.clearDisplay();
-                display.setTextSize(2);
-                display.setTextColor(WHITE);
                 display.setCursor(0, 10);
-                display.println("1111");
+                display.println("ModeHandle");
                 display.display();
                 break;
         }
@@ -89,62 +82,62 @@ void loop() {
 
     // IR sensor
     // SLL = digitalRead(sensor1);
-    int SL = digitalRead(sensor2);
+    // int SL = digitalRead(sensor2);
     // SM = digitalRead(sensor3);
-    int SR = digitalRead(sensor4);
+    // int SR = digitalRead(sensor4);
     // SRR = digitalRead(sensor5);
 
     //循迹
     // if (SM == HIGH) {
     //      run(45,37);
     // }
-    if (SL == 1 && SR == 0) {
-        display.clearDisplay();
-        display.setTextSize(2);
-        display.setTextColor(WHITE);
-        display.setCursor(0, 40);
-        display.println("right");
-        display.display();
-        Serial.print(SR);
-        Serial.println(SL);
-        delay(100);
-        // left(35, 57);
-    }
+    // if (SL == 1 && SR == 0) {
+    //     display.clearDisplay();
+    //     display.setTextSize(2);
+    //     display.setTextColor(WHITE);
+    //     display.setCursor(0, 40);
+    //     display.println("right");
+    //     display.display();
+    //     Serial.print(SR);
+    //     Serial.println(SL);
+    //     delay(100);
+    //     // left(35, 57);
+    // }
     // if (SLL == HIGH && SM == LOW) {
     //      left(35,57);
     // }
-    else if (SR == 1 && SL == 0) {
-        display.clearDisplay();
-        display.setTextSize(2);
-        display.setTextColor(WHITE);
-        display.setCursor(0, 20);
-        display.println("left");
-        display.display();
-        Serial.print(SR);
-        Serial.println(SL);
-        delay(100);
-        // right(50, 32);
-    } else if (SR == 1 && SL == 1) {
-        display.clearDisplay();
-        display.setTextSize(2);
-        display.setTextColor(WHITE);
-        display.setCursor(0, 10);
-        display.println("forward");
-        display.display();
-        Serial.print(SR);
-        Serial.println(SL);
-        delay(100);
-    } else {
-        display.clearDisplay();
-        display.setTextSize(2);
-        display.setTextColor(WHITE);
-        display.setCursor(50, 50);
-        display.println("other");
-        display.display();
-        Serial.print(SR);
-        Serial.println(SL);
-        delay(100);
-    }
+    // else if (SR == 1 && SL == 0) {
+    //     display.clearDisplay();
+    //     display.setTextSize(2);
+    //     display.setTextColor(WHITE);
+    //     display.setCursor(0, 20);
+    //     display.println("left");
+    //     display.display();
+    //     Serial.print(SR);
+    //     Serial.println(SL);
+    //     delay(100);
+    //     // right(50, 32);
+    // } else if (SR == 1 && SL == 1) {
+    //     display.clearDisplay();
+    //     display.setTextSize(2);
+    //     display.setTextColor(WHITE);
+    //     display.setCursor(0, 10);
+    //     display.println("forward");
+    //     display.display();
+    //     Serial.print(SR);
+    //     Serial.println(SL);
+    //     delay(100);
+    // } else {
+    //     display.clearDisplay();
+    //     display.setTextSize(2);
+    //     display.setTextColor(WHITE);
+    //     display.setCursor(50, 50);
+    //     display.println("other");
+    //     display.display();
+    //     Serial.print(SR);
+    //     Serial.println(SL);
+    //     delay(100);
+    // }
     // if (SRR == HIGH && SM == LOW) {
     //     right(50,32);
     // }
