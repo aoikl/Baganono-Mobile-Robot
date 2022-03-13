@@ -3,25 +3,36 @@
     1.include
 
 ====================*/
-// Bluetooth
+// 1.1  Bluetooth
+#include <Arduino.h>
 #include <BluetoothSerial.h>
 BluetoothSerial BT;
+void BTinit();
 
-// OLED
+// 1.2  OLED
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <Arduino.h>
 #include <Wire.h>
 #define SCREEN_WIDTH 128  // OLED display width, in pixels
 #define SCREEN_HEIGHT 64  // OLED display height, in pixels
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+void OLEDinit();
+void OLEDdisplay(String text, String text2, String text3);
 
-// IR sensor
-const int sensor1 = 9;
-const int sensor2 = 39;
-const int sensor3 = 11;
-const int sensor4 = 36;
-const int sensor5 = 13;
+// 1.3  IR sensor
+#define sensor1 9
+#define sensor2 39
+#define sensor3 11
+#define sensor4 36
+#define sensor5 13
+int IRread[5] = {0, 0, 0, 0, 0};
+void IRinit();
+
+// 1.4  Motor_Shield
+#include "WEMOS_Motor.h"
+float pwm;
+Motor M1(0x30, _MOTOR_A, 1000);  // Motor LeftFront
+Motor M2(0x30, _MOTOR_B, 1000);  // Motor LeftRear
 
 /*====================
 
@@ -29,63 +40,25 @@ const int sensor5 = 13;
 
 ====================*/
 void setup() {
-    Serial.begin(115200);
-    // Bluetooth
-    BT.begin("BagaNono-Robot");
-    BT.setPin("899819");
-    Serial.printf("BT initial ok and ready to pair. \r\n");
-
-    // OLED
-    if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {  // Address 0x3D for 128x64
-        Serial.println(F("SSD1306 allocation failed"));
-        for (;;)
-            ;
-    }
-    delay(2000);
-    display.clearDisplay();
-    display.setTextSize(2);
-    display.setTextColor(WHITE);
-    display.setCursor(0, 10);
-    display.println("BagaNono BaseBase");
-    display.display();
-    delay(1000);
-    // IR sensor
-    pinMode(sensor1, INPUT);
-    pinMode(sensor2, INPUT);
-    pinMode(sensor3, INPUT);
-    pinMode(sensor4, INPUT);
-    pinMode(sensor5, INPUT);
+    BTinit();
+    OLEDinit();
+    IRinit();
 }
 
 void loop() {
-    // Bluetooth
     if (BT.available()) {
+        // Mode
         switch (BT.read()) {
             case 'a':
-                display.clearDisplay();
-                display.setCursor(0, 10);
-                display.println("ModeAuto");
-                display.println("delay 1s");
-                display.display();
-                delay(1000);
-                
+                display.setFont();
+                // OLEDdisplay("ModeAuto","--","--");
                 break;
 
             case 'A':
-                display.clearDisplay();
-                display.setCursor(0, 10);
-                display.println("ModeHandle");
-                display.display();
+                OLEDdisplay("ModeHandle", "--", "--");
                 break;
         }
     }
-
-    // IR sensor
-    // SLL = digitalRead(sensor1);
-    // int SL = digitalRead(sensor2);
-    // SM = digitalRead(sensor3);
-    // int SR = digitalRead(sensor4);
-    // SRR = digitalRead(sensor5);
 
     //循迹
     // if (SM == HIGH) {
@@ -157,6 +130,46 @@ void loop() {
 
 /*====================
 
-      3.Function
+    3.Function
 
 ====================*/
+//  BT
+void BTinit() {
+    Serial.begin(115200);
+    BT.begin("BagaNono-Robot");
+    BT.setPin("899819");
+    Serial.printf("BT initial ok and ready to pair. \r\n");
+}
+
+//  OLED
+void OLEDinit() {
+    display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+    delay(2000);
+    display.clearDisplay();
+    display.setFont();
+    display.setTextColor(WHITE);
+    display.setCursor(0, 10);
+    display.println("BagaNono BaseBase");
+    display.println("OLED turn On");
+    display.display();
+}
+
+void OLEDdisplay(String text, String text2, String text3) {
+    display.clearDisplay();
+    // display.setTextSize(2);
+    // display.setTextColor(WHITE);
+    display.setCursor(0, 10);
+    display.println(text);
+    display.println(text2);
+    display.println(text3);
+    display.display();
+}
+
+//  IR
+void IRinit() {
+    pinMode(sensor1, INPUT);
+    pinMode(sensor2, INPUT);
+    pinMode(sensor3, INPUT);
+    pinMode(sensor4, INPUT);
+    pinMode(sensor5, INPUT);
+}
