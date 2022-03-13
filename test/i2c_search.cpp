@@ -1,6 +1,6 @@
 /*********
-  Rui Santos
-  Complete project details at https://randomnerdtutorials.com
+    Rui Santos
+    Complete project details at https://randomnerdtutorials.com
 *********/
 #include <Arduino.h>
 #include <Wire.h>
