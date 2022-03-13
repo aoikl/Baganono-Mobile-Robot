@@ -10,14 +10,12 @@ BluetoothSerial BT;
 void BTinit();
 
 // 1.2  OLED
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
 #include <Wire.h>
-#define SCREEN_WIDTH 128  // OLED display width, in pixels
-#define SCREEN_HEIGHT 64  // OLED display height, in pixels
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
+#include "SSD1306.h"
+#define SDA 21
+#define SCL 22
+SSD1306 display(0x3C, SDA, SCL);
 void OLEDinit();
-void OLEDdisplay(String text, String text2, String text3);
 
 // 1.3  IR sensor
 #define sensor1 9
@@ -40,6 +38,7 @@ Motor M2(0x30, _MOTOR_B, 1000);  // Motor LeftRear
 
 ====================*/
 void setup() {
+    Serial.begin(115200);
     BTinit();
     OLEDinit();
     IRinit();
@@ -50,12 +49,17 @@ void loop() {
         // Mode
         switch (BT.read()) {
             case 'a':
-                display.setFont();
-                // OLEDdisplay("ModeAuto","--","--");
+                display.clear();
+                display.drawString(0, 10, "ModeAuto");
+                display.display();
+                delay(1000);
                 break;
 
             case 'A':
-                OLEDdisplay("ModeHandle", "--", "--");
+                display.clear();
+                display.drawString(0, 10, "ModeHandle");
+                display.display();
+                delay(1000);
                 break;
         }
     }
@@ -135,7 +139,6 @@ void loop() {
 ====================*/
 //  BT
 void BTinit() {
-    Serial.begin(115200);
     BT.begin("BagaNono-Robot");
     BT.setPin("899819");
     Serial.printf("BT initial ok and ready to pair. \r\n");
@@ -143,25 +146,11 @@ void BTinit() {
 
 //  OLED
 void OLEDinit() {
-    display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
-    delay(2000);
-    display.clearDisplay();
-    display.setFont();
-    display.setTextColor(WHITE);
-    display.setCursor(0, 10);
-    display.println("BagaNono BaseBase");
-    display.println("OLED turn On");
-    display.display();
-}
-
-void OLEDdisplay(String text, String text2, String text3) {
-    display.clearDisplay();
-    // display.setTextSize(2);
-    // display.setTextColor(WHITE);
-    display.setCursor(0, 10);
-    display.println(text);
-    display.println(text2);
-    display.println(text3);
+    display.init();
+    display.flipScreenVertically();
+    display.setFont(ArialMT_Plain_16);
+    display.drawStringMaxWidth(0, 0, 128, "BagaNono BaseBase");
+    display.drawStringMaxWidth(0, 34, 128, "OLED turn on");
     display.display();
 }
 
