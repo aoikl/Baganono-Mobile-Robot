@@ -8,7 +8,7 @@
 ///
 
 //           电机设置             //
-#include <Arduino.h>;
+#include <Arduino.h>
 #define leftA_PIN 5
 #define leftB_PIN 6
 #define righA_PIN 9
@@ -54,7 +54,7 @@ void motor_control();
 
 void setup() {
     Serial.begin(115200);  //串口波特率115200（PC端使用）
-    track_pinint();      //循迹引脚初始化
+    //track_pinint();      //循迹引脚初始化
     motor_pinint();      //电机引脚初始化
 }
 void loop() {

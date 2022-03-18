@@ -5,16 +5,16 @@
 ==============================*/
 //    1.0  AsyncElegantOTA    //
 // 192.168.43.136
-// #include <Arduino.h>
-// #include <AsyncElegantOTA.h>
-// #include <AsyncTCP.h>
-// #include <ESPAsyncWebServer.h>
-// #include <WiFi.h>
-// //ご注文はWIFIですか?    //111111111
-// const char* ssid = "ご注文はWIFIですか?";
-// const char* password = "111111111";
-// AsyncWebServer server(80);
-// void OTAinit();
+#include <Arduino.h>
+#include <AsyncElegantOTA.h>
+#include <AsyncTCP.h>
+#include <ESPAsyncWebServer.h>
+#include <WiFi.h>
+//ご注文はWIFIですか?    //111111111
+const char* ssid = "ご注文はWIFIですか?";
+const char* password = "111111111";
+AsyncWebServer server(80);
+void OTAinit();
 
 //    1.1  Bluetooth (NodeMCU-32s)    //
 #include <BluetoothSerial.h>
@@ -71,6 +71,7 @@ void ServoDriverinit();
 ==============================*/
 void setup() {
     Serial.begin(115200);
+    Wire.setClock(400000);
     display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
     MotorLeft_F.setmotor(_SHORT_BRAKE);
     MotorLeft_R.setmotor(_SHORT_BRAKE);
@@ -78,7 +79,7 @@ void setup() {
     MotorRight_R.setmotor(_SHORT_BRAKE);
     OLEDinit();
     delay(1000);
-    // OTAinit();
+    OTAinit();
     delay(1000);
     ServoDriverinit();
     delay(1000);
@@ -234,30 +235,30 @@ void loop() {
 ==============================*/
 //    3.0  AsyncElegantOTA    //
 
-// void OTAinit() {
-//     WiFi.mode(WIFI_STA);
-//     WiFi.begin(ssid, password);
-//     Serial.println("");
+void OTAinit() {
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid, password);
+    Serial.println("");
 
-//     // Wait for connection
-//     while (WiFi.status() != WL_CONNECTED) {
-//         delay(500);
-//         Serial.print(".");
-//     }
-//     Serial.println("");
-//     Serial.print("Connected to ");
-//     Serial.println(ssid);
-//     Serial.print("IP address: ");
-//     Serial.println(WiFi.localIP());
+    // Wait for connection
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("");
+    Serial.print("Connected to ");
+    Serial.println(ssid);
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
 
-//     server.on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
-//         request->send(200, "text/plain", "Hi! I am ESP32.");
-//     });
+    server.on("/", HTTP_GET, [](AsyncWebServerRequest* request) {
+        request->send(200, "text/plain", "Hi! I am ESP32.");
+    });
 
-//     AsyncElegantOTA.begin(&server);  // Start ElegantOTA
-//     server.begin();
-//     Serial.println("HTTP server started");
-// }
+    AsyncElegantOTA.begin(&server);  // Start ElegantOTA
+    server.begin();
+    Serial.println("HTTP server started");
+}
 
 //    3.1  Bluetooth (NodeMCU-32s)    //
 void BTinit() {
