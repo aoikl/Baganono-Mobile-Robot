@@ -24,13 +24,11 @@ Adafruit_SSD1306 display(128, 64, &Wire, -1);
 void OLEDinit() {
     display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
     display.display();
-    delay(2500);
-    // display.setFont(&FreeSerifBoldItalic9pt7b);
+    delay(2000);
     display.clearDisplay();
     display.setTextColor(WHITE);
     display.setCursor(0, 0);
-    display.ttyPrintln("OLEDInit");
-    display.ttyPrintln("Turn on!");
+    display.ttyPrintln("OLED Init!");
     display.display();
 }
 /*[------------------------------------------------]
@@ -45,15 +43,21 @@ void OLEDinit() {
 #include <WiFi.h>
 const char* ssid = "ご注文はWIFIですか?";
 const char* password = "111111111";
-int TCPclient_Port = 443;
-WiFiServer TCPclient_server(TCPclient_Port, 4);  //声明服务器对象
+// Provided by compiler at compile time.
+const char compile_date[] = __DATE__ " " __TIME__;
+//客戶端讀取用緩存
+String readBuff = "";
+String readBuff_subStr = "";
+int readBuff_Int = 0;
+WiFiServer TCPclient_server(443);  //声明服务器对象
+WiFiClient client = TCPclient_server.available();
 AsyncWebServer OTA_server(80);
-void OTAinit() {
+void WIFIinit() {
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);  //关闭STA模式下wifi休眠，提高响应速度
+    WiFi.disconnect();
+    delay(500);
     WiFi.begin(ssid, password);
-    display.ttyPrintln("");
-    display.display();
     // Wait for connection
     while (WiFi.status() != WL_CONNECTED) {
         delay(500);
@@ -63,34 +67,24 @@ void OTAinit() {
     display.clearDisplay();
     display.setCursor(0, 0);
     display.println("[Connected]");
+    display.println("");
+    display.println("Compile timestamp: ");
+    display.println(compile_date);
+    display.println("");
     display.println("IP address:");
     display.print(WiFi.localIP());
     display.print(":");
-    display.println(TCPclient_Port);
+    display.println(443);
+    display.println("");
     display.display();
 
     AsyncElegantOTA.begin(&OTA_server);  // Start ElegantOTA
-    TCPclient_server.begin();
     OTA_server.begin();
-    display.ttyPrintln("HTTP server started!");
+    TCPclient_server.begin();
+    TCPclient_server.setNoDelay(true);
+    display.ttyPrintln("WIFI Init!");
     display.display();
 }
-/*[------------------------------------------------]
-
-    1.1 Bluetooth (NodeMCU-32s)
-
-[------------------------------------------------]*/
-// #include <BluetoothSerial.h>
-// BluetoothSerial BT;
-// void BTinit() {
-//     BT.begin("BagaNono-Robot");
-//     // BT.setPin("899819");
-//     display.clearDisplay();
-//     display.setCursor(0, 14);
-//     display.print("BT ready to pair");
-//     display.display();
-// }
-
 /*[------------------------------------------------]
 
     1.3 Infrared Tracking Sensor Module 5 Channel (TCRT5000)
@@ -112,6 +106,8 @@ void IRinit() {
     pinMode(middle_track_PIN, INPUT);
     pinMode(righA_track_PIN, INPUT);
     pinMode(righB_track_PIN, INPUT);
+    display.ttyPrintln("IR Init!");
+    display.display();
 }
 void read_sensor_values() {
     sensor[0] = digitalRead(leftA_track_PIN);
@@ -157,29 +153,29 @@ void calc_pid() {
 
 [------------------------------------------------]*/
 #include "WEMOS_Motor.h"
-Motor MotorLeft_F(0x30, _MOTOR_A, 1000);    // LeftFront
-Motor MotorLeft_R(0x30, _MOTOR_B, 1000);    // LeftRear
-Motor MotorRight_F(0x2E, _MOTOR_A, 1000);   // RightFront
-Motor MotorRight_R(0x2E, _MOTOR_B, 1000);   // RightRear
-void motorsWrite(int speedL, int speedR) {  //速度设定范围(-100,100)
+Motor Left_Front(0x30, _MOTOR_A, 1000);    // LeftFront
+Motor Left_REAR(0x30, _MOTOR_B, 1000);     // LeftRear
+Motor Right_FRONT(0x2E, _MOTOR_A, 1000);   // RightFront
+Motor Right_REAR(0x2E, _MOTOR_B, 1000);    // RightRear
+void WheelSpeed(int speedL, int speedR) {  //速度设定范围(-100,100)
     if (speedR > 0) {
-        MotorLeft_F.setmotor(_CCW, speedR);
-        MotorLeft_R.setmotor(_CCW, speedR);
+        Left_Front.setmotor(_CCW, speedR);
+        Left_REAR.setmotor(_CCW, speedR);
 
     } else {
-        MotorLeft_F.setmotor(_CW, speedR);
-        MotorLeft_R.setmotor(_CW, speedR);
+        Left_Front.setmotor(_CW, speedR);
+        Left_REAR.setmotor(_CW, speedR);
     }
 
     if (speedL > 0) {
-        MotorRight_F.setmotor(_CCW, speedL);
-        MotorRight_R.setmotor(_CCW, speedL);
+        Right_FRONT.setmotor(_CCW, speedL);
+        Right_REAR.setmotor(_CCW, speedL);
     } else {
-        MotorRight_F.setmotor(_CW, speedL);
-        MotorRight_R.setmotor(_CW, speedL);
+        Right_FRONT.setmotor(_CW, speedL);
+        Right_REAR.setmotor(_CW, speedL);
     }
 }
-void motor_control() {
+void Tracking() {
     int left_motor_speed = initial_motor_speed - PID_value;
     int right_motor_speed = initial_motor_speed + PID_value;
 
@@ -189,9 +185,9 @@ void motor_control() {
     if (left_motor_speed > 100) {
         left_motor_speed = 100;
     }
-    motorsWrite(left_motor_speed, right_motor_speed);
+    WheelSpeed(left_motor_speed, right_motor_speed);
     display.ttyPrint("L:");
-    display.ttyPrintln((String)right_motor_speed);
+    display.ttyPrint((String)right_motor_speed);
     display.ttyPrint(",");
     display.ttyPrint("R:");
     display.ttyPrintln((String)left_motor_speed);
@@ -222,12 +218,92 @@ int ServoMotor0 = 0;  // 0~15 channels
 void ServoDriverinit() {
     pwm.begin();
     pwm.setPWMFreq(FREQUENCY);
-    display.ttyPrintln("Servo Driver");
-    display.display();
-    display.ttyPrintln("Turn on!");
+    display.ttyPrintln("Servo Driver Init!");
     display.display();
 }
+/*[-----------------------------------------------]
 
+    Mode
+
+[------------------------------------------------]*/
+void ModeAuto() {
+    client.println("=>[ModeAuto]");
+    display.ttyPrintln("=>[ModeAuto]");
+    display.display();
+    while (1) {
+        if (client.available()) {
+            readBuff = client.readStringUntil('\r');
+            readBuff.trim();
+            if (readBuff.startsWith("STOP")) {
+                readBuff = "";
+                break;  //跳出循跡的 while 迴圈
+            }
+            readBuff = "";
+        }
+        client.println("Tracking.");
+        client.println("Tracking...");
+        read_sensor_values();
+        client.print("Sensor:" + sensor[0] + sensor[1] + sensor[2] + sensor[3] + sensor[4]);
+        calc_pid();
+        Tracking();
+    }
+    Left_Front.setmotor(_SHORT_BRAKE);
+    Left_REAR.setmotor(_SHORT_BRAKE);
+    Right_FRONT.setmotor(_SHORT_BRAKE);
+    Right_REAR.setmotor(_SHORT_BRAKE);
+    client.println("Track STOP");
+    display.ttyPrintln("Track STOP");
+    display.display();
+}
+void ModeHandle() {
+    client.println("=>[ModeHandle]");
+    display.ttyPrintln("=>[ModeHandle]");
+    display.display();
+    while (1) {
+        if (client.available()) {  //客戶端有發送，則接收
+            readBuff = client.readStringUntil('\r');
+            readBuff.trim();
+            client.println(readBuff);
+            if (readBuff.startsWith("STOP")) {
+                readBuff = "";
+                break;  //若接收到STOP則跳出ModeHandle迴圈
+            }
+        }
+        if (readBuff.startsWith("RIGHT")) {
+            readBuff_subStr = readBuff.substring(5);  //尋找從索引位置到末端的字符串
+            readBuff_Int = readBuff_subStr.toInt();
+            if (readBuff_Int > 0) {
+                Right_FRONT.setmotor(_CW, readBuff_Int);
+                Right_REAR.setmotor(_CW, readBuff_Int);
+            } else {
+                Right_FRONT.setmotor(_CCW, readBuff_Int);
+                Right_REAR.setmotor(_CCW, readBuff_Int);
+            }
+
+            display.ttyPrint("RIGHT:");
+            display.ttyPrint(readBuff_subStr);
+            display.display();
+            display.ttyPrintln("..");
+            display.display();
+            readBuff = "";
+        } else if (readBuff.startsWith("LEFT")) {
+            Left_Front.setmotor(_CW, 50);
+            Left_REAR.setmotor(_CW, 50);
+            display.ttyPrint("LEFT:");
+            display.ttyPrint(speedStr);
+            display.display();
+            display.ttyPrintln("..");
+            display.display();
+        }
+    }
+    Left_Front.setmotor(_SHORT_BRAKE);
+    Left_REAR.setmotor(_SHORT_BRAKE);
+    Right_FRONT.setmotor(_SHORT_BRAKE);
+    Right_REAR.setmotor(_SHORT_BRAKE);
+    client.println("Handle STOP");
+    display.ttyPrintln("Handle STOP");
+    display.display();
+}
 /*========================================
 
             Setup & Loop
@@ -236,165 +312,42 @@ void ServoDriverinit() {
 void setup() {
     Serial.begin(115200);
     Wire.setClock(400000);
-    MotorLeft_F.setmotor(_SHORT_BRAKE);
-    MotorLeft_R.setmotor(_SHORT_BRAKE);
-    MotorRight_F.setmotor(_SHORT_BRAKE);
-    MotorRight_R.setmotor(_SHORT_BRAKE);
+    Left_Front.setmotor(_SHORT_BRAKE);
+    Left_REAR.setmotor(_SHORT_BRAKE);
+    Right_FRONT.setmotor(_SHORT_BRAKE);
+    Right_REAR.setmotor(_SHORT_BRAKE);
     OLEDinit();
     delay(1000);
     ServoDriverinit();
     delay(1000);
     IRinit();
     delay(1000);
-    OTAinit();
+    WIFIinit();
     delay(1000);
 }
 
 void loop() {
-    WiFiClient client = TCPclient_server.available();
+    client = TCPclient_server.available();
     if (client) {  //提示客戶端已連接
         display.ttyPrintln("[client connented]");
         display.display();
     }
-    String readBuff;
     while (client.connected()) {  //如果客戶端處於連接狀態
         if (client.available()) {
+            readBuff = client.readStringUntil('\r');
+            readBuff.trim();  //消除多於空白
             // Mode
-            char c = client.read();  //讀取一個字元
-            readBuff += c;
-            delay(2);
-            if (c == '\n') {      //接收到換行字元
-                readBuff.trim();  //消除多於空白
+            if (readBuff.startsWith("AUTO")) {
+                ModeAuto();
+            } else if (readBuff.startsWith("HANDLE")) {
+                // ModeHandle();
                 client.println("Received: " + readBuff);
                 display.ttyPrintln("Recieve:" + readBuff);
                 display.display();
                 client.println("--");
                 display.ttyPrintln("--");
                 display.display();
-
-                readBuff = "";
             }
         }
     }
 }
-
-void Print_all(String _text) {
-    display.ttyPrintln(_text);
-    display.display();
-    client.println(_text);
-}
-/*
-
-display.ttyPrint("Wait for setting Modes");
-display.display();
-switch (client.read()) {
-    case 'a':
-        display.ttyPrintln("ModeAuto");
-        display.display();
-        delay(2000);
-        while (client.read() != 's') {
-            display.clearDisplay();
-            display.setCursor(0, 14);
-            display.print("tracking.");
-            display.display();
-            delay(100);
-            display.setCursor(0, 14);
-            display.println("tracking...");
-            display.display();
-            delay(100);
-            read_sensor_values();
-            display.setCursor(0, 28);
-            display.print("sensor:");
-            display.print(sensor[0]);
-            display.print(sensor[1]);
-            display.print(sensor[2]);
-            display.print(sensor[3]);
-            display.println(sensor[4]);
-            display.display();
-            calc_pid();
-            display.setCursor(0, 42);
-            motor_control();
-            delay(500);
-        }
-        MotorLeft_F.setmotor(_SHORT_BRAKE);
-        MotorLeft_R.setmotor(_SHORT_BRAKE);
-        MotorRight_F.setmotor(_SHORT_BRAKE);
-        MotorRight_R.setmotor(_SHORT_BRAKE);
-        display.ttyPrintln("track stop");
-        display.display();
-        break;
-    case 'A':
-        display.ttyPrintln("ModeHandle");
-        display.display();
-        delay(1000);
-        while (client.read() != 's') {
-            display.ttyPrintln("PressBtn2control.");
-            display.display();
-            delay(10);
-            display.ttyPrintln("PressBtn2control..");
-            display.display();
-            // pulse_wide = map(BT.read(), 0, 1023, MIN_PULSE_WIDTH, MAX_PULSE_WIDTH);
-            delay(10);
-            switch (client.read()) {
-                case 'F':
-                    MotorLeft_F.setmotor(_CCW, 50);
-                    MotorLeft_R.setmotor(_CCW, 50);
-                    MotorRight_F.setmotor(_CCW, 50);
-                    MotorRight_R.setmotor(_CCW, 50);
-                    display.ttyPrintln("F.");
-                    display.display();
-                    display.ttyPrintln("F..");
-                    display.display();
-                    break;
-                case 'B':
-                    MotorLeft_F.setmotor(_CW, 50);
-                    MotorLeft_R.setmotor(_CW, 50);
-                    MotorRight_F.setmotor(_CW, 50);
-                    MotorRight_R.setmotor(_CW, 50);
-                    display.ttyPrintln("B.");
-                    display.display();
-                    display.ttyPrintln("B..");
-                    display.display();
-                    break;
-                case 'R':
-                    MotorLeft_F.setmotor(_CCW, 50);
-                    MotorLeft_R.setmotor(_CCW, 50);
-                    MotorRight_F.setmotor(_CW, 50);
-                    MotorRight_R.setmotor(_CW, 50);
-                    display.ttyPrintln("R");
-                    display.display();
-                    display.ttyPrintln("R..");
-                    display.display();
-                    break;
-                case 'L':
-                    MotorLeft_F.setmotor(_CW, 50);
-                    MotorLeft_R.setmotor(_CW, 50);
-                    MotorRight_F.setmotor(_CCW, 50);
-                    MotorRight_R.setmotor(_CCW, 50);
-                    display.ttyPrintln("L");
-                    display.display();
-                    display.ttyPrintln("L..");
-                    display.display();
-                    break;
-                case 'P':
-                    MotorLeft_F.setmotor(_SHORT_BRAKE);
-                    MotorLeft_R.setmotor(_SHORT_BRAKE);
-                    MotorRight_F.setmotor(_SHORT_BRAKE);
-                    MotorRight_R.setmotor(_SHORT_BRAKE);
-                    display.ttyPrintln("P");
-                    display.display();
-                    display.ttyPrintln("P..");
-                    display.display();
-                    break;
-                default:
-                    display.ttyPrintln("Default");
-                    display.display();
-                    display.ttyPrintln("Default..");
-                    display.display();
-                    break;
-            }
-        }
-        break;
-}
-
-*/
