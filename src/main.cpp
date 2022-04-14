@@ -49,6 +49,7 @@ const char compile_date[] = __DATE__ " " __TIME__;
 String readBuff = "";
 String readBuff_subStr = "";
 int readBuff_Int = 0;
+int WifiTryCount = 0;
 WiFiServer TCPclient_server(443);  //声明服务器对象
 WiFiClient client = TCPclient_server.available();
 AsyncWebServer OTA_server(80);
@@ -63,6 +64,9 @@ void WIFIinit() {
         delay(500);
         display.ttyPrint(".");
         display.display();
+        if (WifiTryCount++ >= 20) {  //嘗試20次未連上網，重新啟動
+            ESP.restart();
+        }
     }
     display.clearDisplay();
     display.setCursor(0, 0);
@@ -139,6 +143,16 @@ void read_sensor_values() {
     } else {
         error = 0;
     }
+    client.print("Sensor: ");
+    client.print(sensor[0]);
+    client.print(", ");
+    client.print(sensor[1]);
+    client.print(", ");
+    client.print(sensor[2]);
+    client.print(", ");
+    client.print(sensor[3]);
+    client.print(", ");
+    client.println(sensor[4]);
 }
 void calc_pid() {
     P = error;
@@ -153,55 +167,67 @@ void calc_pid() {
 
 [------------------------------------------------]*/
 #include "WEMOS_Motor.h"
-Motor Left_Front(0x30, _MOTOR_A, 1000);    // LeftFront
-Motor Left_REAR(0x30, _MOTOR_B, 1000);     // LeftRear
-Motor Right_FRONT(0x2E, _MOTOR_A, 1000);   // RightFront
-Motor Right_REAR(0x2E, _MOTOR_B, 1000);    // RightRear
+Motor Left_FRONT(0x2E, _MOTOR_A, 1000);    // LeftFront
+Motor Left_REAR(0x2E, _MOTOR_B, 1000);     // LeftRear
+Motor Right_FRONT(0x30, _MOTOR_B, 1000);   // RightFront
+Motor Right_REAR(0x30, _MOTOR_A, 1000);    // RightRear
 void WheelSpeed(int speedL, int speedR) {  //速度设定范围(-100,100)
     if (speedR > 0) {
-        Left_Front.setmotor(_CCW, speedR);
+        Left_FRONT.setmotor(_CCW, speedR);
         Left_REAR.setmotor(_CCW, speedR);
 
     } else {
-        Left_Front.setmotor(_CW, speedR);
+        speedR = -speedR;
+        Left_FRONT.setmotor(_CW, speedR);
         Left_REAR.setmotor(_CW, speedR);
     }
 
     if (speedL > 0) {
-        Right_FRONT.setmotor(_CCW, speedL);
-        Right_REAR.setmotor(_CCW, speedL);
-    } else {
         Right_FRONT.setmotor(_CW, speedL);
         Right_REAR.setmotor(_CW, speedL);
+    } else {
+        speedL = -speedL;
+        Right_FRONT.setmotor(_CCW, speedL);
+        Right_REAR.setmotor(_CCW, speedL);
     }
 }
 void Tracking() {
     int left_motor_speed = initial_motor_speed - PID_value;
     int right_motor_speed = initial_motor_speed + PID_value;
 
-    if (left_motor_speed < -100) {
-        left_motor_speed = -100;
-    }
     if (left_motor_speed > 100) {
         left_motor_speed = 100;
     }
+    if (left_motor_speed < -100) {
+        left_motor_speed = -100;
+    }
+    if (right_motor_speed > 100) {
+        right_motor_speed = 100;
+    }
+    if (right_motor_speed < -100) {
+        right_motor_speed = -100;
+    }
     WheelSpeed(left_motor_speed, right_motor_speed);
     display.ttyPrint("L:");
-    display.ttyPrint((String)right_motor_speed);
-    display.ttyPrint(",");
+    display.ttyPrint(String(right_motor_speed));
+    display.ttyPrint(", ");
     display.ttyPrint("R:");
-    display.ttyPrintln((String)left_motor_speed);
+    display.ttyPrint(String(left_motor_speed));
+    display.ttyPrint(", ");
+    display.ttyPrint("er:");
+    display.ttyPrintln(String(error));
     display.display();
-    // display.setCursor(0, 56);
-    // display.print("er:");
-    // display.print(error);
-    // display.print(",");
-    // display.print("Kp:");
-    // display.print(Kp);
-    // display.print(",");
-    // display.print("PID:");
-    // display.print(PID_value);
-    // display.display();
+    display.ttyPrint("P:");
+    display.ttyPrint(String(P));
+    display.ttyPrint(", ");
+    display.ttyPrint("I:");
+    display.ttyPrint(String(I));
+    display.ttyPrint(", ");
+    display.ttyPrint("D:");
+    display.ttyPrintln(String(D));
+    display.ttyPrint("PID:");
+    display.ttyPrintln(String(PID_value));
+    display.display();
 }
 /*[-----------------------------------------------]
 
@@ -240,14 +266,12 @@ void ModeAuto() {
             }
             readBuff = "";
         }
-        client.println("Tracking.");
         client.println("Tracking...");
         read_sensor_values();
-        client.print("Sensor:" + sensor[0] + sensor[1] + sensor[2] + sensor[3] + sensor[4]);
         calc_pid();
         Tracking();
     }
-    Left_Front.setmotor(_SHORT_BRAKE);
+    Left_FRONT.setmotor(_SHORT_BRAKE);
     Left_REAR.setmotor(_SHORT_BRAKE);
     Right_FRONT.setmotor(_SHORT_BRAKE);
     Right_REAR.setmotor(_SHORT_BRAKE);
@@ -260,43 +284,48 @@ void ModeHandle() {
     display.ttyPrintln("=>[ModeHandle]");
     display.display();
     while (1) {
-        if (client.available()) {  //客戶端有發送，則接收
-            readBuff = client.readStringUntil('\r');
-            readBuff.trim();
-            client.println(readBuff);
-            if (readBuff.startsWith("STOP")) {
-                readBuff = "";
-                break;  //若接收到STOP則跳出ModeHandle迴圈
-            }
+        // if (client.available()) {  //客戶端有發送，則接收
+        readBuff = client.readStringUntil('\r');
+        readBuff.trim();
+        client.println(readBuff);
+        if (readBuff.startsWith("STOP")) {
+            readBuff = "";
+            break;  //若接收到STOP則跳出ModeHandle迴圈
         }
+        //}
         if (readBuff.startsWith("RIGHT")) {
             readBuff_subStr = readBuff.substring(5);  //尋找從索引位置到末端的字符串
             readBuff_Int = readBuff_subStr.toInt();
             if (readBuff_Int > 0) {
-                Right_FRONT.setmotor(_CW, readBuff_Int);
-                Right_REAR.setmotor(_CW, readBuff_Int);
-            } else {
                 Right_FRONT.setmotor(_CCW, readBuff_Int);
                 Right_REAR.setmotor(_CCW, readBuff_Int);
+            } else {
+                readBuff_Int = -readBuff_Int;
+                Right_FRONT.setmotor(_CW, readBuff_Int);
+                Right_REAR.setmotor(_CW, readBuff_Int);
             }
-
-            display.ttyPrint("RIGHT:");
-            display.ttyPrint(readBuff_subStr);
-            display.display();
-            display.ttyPrintln("..");
-            display.display();
+            client.print("RIGHT:");
+            client.print(readBuff_subStr);
+            client.println("..");
             readBuff = "";
         } else if (readBuff.startsWith("LEFT")) {
-            Left_Front.setmotor(_CW, 50);
-            Left_REAR.setmotor(_CW, 50);
-            display.ttyPrint("LEFT:");
-            display.ttyPrint(speedStr);
-            display.display();
-            display.ttyPrintln("..");
-            display.display();
+            readBuff_subStr = readBuff.substring(4);  //尋找從索引位置到末端的字符串
+            readBuff_Int = readBuff_subStr.toInt();
+            if (readBuff_Int > 0) {
+                Left_FRONT.setmotor(_CW, readBuff_Int);
+                Left_REAR.setmotor(_CW, readBuff_Int);
+            } else {
+                readBuff_Int = -readBuff_Int;
+                Left_FRONT.setmotor(_CCW, readBuff_Int);
+                Left_REAR.setmotor(_CCW, readBuff_Int);
+            }
+            client.print("LEFT:");
+            client.print(readBuff_subStr);
+            client.println("..");
+            readBuff = "";
         }
     }
-    Left_Front.setmotor(_SHORT_BRAKE);
+    Left_FRONT.setmotor(_SHORT_BRAKE);
     Left_REAR.setmotor(_SHORT_BRAKE);
     Right_FRONT.setmotor(_SHORT_BRAKE);
     Right_REAR.setmotor(_SHORT_BRAKE);
@@ -312,7 +341,7 @@ void ModeHandle() {
 void setup() {
     Serial.begin(115200);
     Wire.setClock(400000);
-    Left_Front.setmotor(_SHORT_BRAKE);
+    Left_FRONT.setmotor(_SHORT_BRAKE);
     Left_REAR.setmotor(_SHORT_BRAKE);
     Right_FRONT.setmotor(_SHORT_BRAKE);
     Right_REAR.setmotor(_SHORT_BRAKE);
@@ -329,8 +358,9 @@ void setup() {
 void loop() {
     client = TCPclient_server.available();
     if (client) {  //提示客戶端已連接
-        display.ttyPrintln("[client connented]");
+        display.ttyPrintln("=>[client connented]");
         display.display();
+        client.println("=>[client connented]");
     }
     while (client.connected()) {  //如果客戶端處於連接狀態
         if (client.available()) {
@@ -340,13 +370,15 @@ void loop() {
             if (readBuff.startsWith("AUTO")) {
                 ModeAuto();
             } else if (readBuff.startsWith("HANDLE")) {
-                // ModeHandle();
-                client.println("Received: " + readBuff);
-                display.ttyPrintln("Recieve:" + readBuff);
+                ModeHandle();
+            } else if (readBuff.startsWith("RESTART")) {
+                client.println("RESTART! ");
+                display.ttyPrintln("RESTART! ");
                 display.display();
                 client.println("--");
                 display.ttyPrintln("--");
                 display.display();
+                ESP.restart();
             }
         }
     }
