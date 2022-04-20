@@ -97,7 +97,6 @@ void Motor::setmotor(uint8_t dir, float pwm_val) {
     Wire.write((byte)_pwm_val);
     Wire.endTransmission();  // stop transmitting
 
-    delay(10);
 }
 
 void Motor::setmotor(uint8_t dir) {

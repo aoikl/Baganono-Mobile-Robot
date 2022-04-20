@@ -8,11 +8,21 @@ char delay: 5
 
 *Repeat
 Delay: 0
-Period: 100
+Period: 5
 ========================================*/
 /*[------------------------------------------------]
 
-    1.2 OLED Display 0.96" I2C 128x64 white (SSD1306)
+    WeMos D1 Mini Motor Drive Shield (TB6612)
+
+[------------------------------------------------]*/
+#include "WEMOS_Motor.h"
+Motor Left_FRONT(0x2E, _MOTOR_A, 1000);   // LeftFront
+Motor Left_REAR(0x2E, _MOTOR_B, 1000);    // LeftRear
+Motor Right_FRONT(0x30, _MOTOR_B, 1000);  // RightFront
+Motor Right_REAR(0x30, _MOTOR_A, 1000);   // RightRear
+/*[------------------------------------------------]
+
+    OLED Display 0.96" I2C 128x64 white (SSD1306)
 
 [------------------------------------------------]*/
 #include <Adafruit_GFX.h>
@@ -24,17 +34,24 @@ Adafruit_SSD1306 display(128, 64, &Wire, -1);
 void OLEDinit() {
     display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
     display.display();
-    delay(2000);
+    for (int i = 0; i < 10; i++) {
+        Left_FRONT.setmotor(_STANDBY);
+        Left_REAR.setmotor(_STANDBY);
+        Right_FRONT.setmotor(_STANDBY);
+        Right_REAR.setmotor(_STANDBY);
+        delay(100);
+    }
     display.clearDisplay();
     display.setTextColor(WHITE);
     display.setCursor(0, 0);
     display.ttyPrintln("OLED Init!");
     display.display();
 }
+
 /*[------------------------------------------------]
 
-    1.0 AsyncElegantOTA
-        192.168.137.110
+    AsyncElegantOTA
+    192.168.137.
 
 [------------------------------------------------]*/
 #include <AsyncElegantOTA.h>
@@ -43,25 +60,23 @@ void OLEDinit() {
 #include <WiFi.h>
 const char* ssid = "ご注文はWIFIですか?";
 const char* password = "111111111";
-// Provided by compiler at compile time.
-const char compile_date[] = __DATE__ " " __TIME__;
-//客戶端讀取用緩存
-String readBuff = "";
+const char compile_date[] = __DATE__ " " __TIME__;  // Provided by compiler at compile time.
+String readBuff = "";                               //客戶端讀取用緩存
 String readBuff_subStr = "";
 int readBuff_Int = 0;
 int WifiTryCount = 0;
-WiFiServer TCPclient_server(443);  //声明服务器对象
+WiFiServer TCPclient_server(443);  //聲明服務器對象
 WiFiClient client = TCPclient_server.available();
 AsyncWebServer OTA_server(80);
 void WIFIinit() {
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);  //关闭STA模式下wifi休眠，提高响应速度
     WiFi.disconnect();
-    delay(500);
+    delay(250);
     WiFi.begin(ssid, password);
     // Wait for connection
     while (WiFi.status() != WL_CONNECTED) {
-        delay(500);
+        delay(250);
         display.ttyPrint(".");
         display.display();
         if (WifiTryCount++ >= 20) {  //嘗試20次未連上網，重新啟動
@@ -71,7 +86,6 @@ void WIFIinit() {
     display.clearDisplay();
     display.setCursor(0, 0);
     display.println("[Connected]");
-    display.println("");
     display.println("Compile timestamp: ");
     display.println(compile_date);
     display.println("");
@@ -91,7 +105,7 @@ void WIFIinit() {
 }
 /*[------------------------------------------------]
 
-    1.3 Infrared Tracking Sensor Module 5 Channel (TCRT5000)
+    Infrared Tracking Sensor Module 5 Channel (TCRT5000)
 
 [------------------------------------------------]*/
 #define leftA_track_PIN 32
@@ -161,16 +175,7 @@ void calc_pid() {
     PID_value = (Kp * P) + (Ki * I) + (Kd * D);
     previous_error = error;
 }
-/*[------------------------------------------------]
 
-    1.4  WeMos D1 Mini Motor Drive Shield (TB6612)
-
-[------------------------------------------------]*/
-#include "WEMOS_Motor.h"
-Motor Left_FRONT(0x2E, _MOTOR_A, 1000);    // LeftFront
-Motor Left_REAR(0x2E, _MOTOR_B, 1000);     // LeftRear
-Motor Right_FRONT(0x30, _MOTOR_B, 1000);   // RightFront
-Motor Right_REAR(0x30, _MOTOR_A, 1000);    // RightRear
 void WheelSpeed(int speedL, int speedR) {  //速度设定范围(-100,100)
     if (speedR > 0) {
         Left_FRONT.setmotor(_CCW, speedR);
@@ -231,7 +236,7 @@ void Tracking() {
 }
 /*[-----------------------------------------------]
 
-    1.5  Adafruit 16-Channel Servo Driver (PCA9685)
+    Adafruit 16-Channel Servo Driver (PCA9685)
 
 [------------------------------------------------]*/
 #include <Adafruit_PWMServoDriver.h>
@@ -271,10 +276,10 @@ void ModeAuto() {
         calc_pid();
         Tracking();
     }
-    Left_FRONT.setmotor(_SHORT_BRAKE);
-    Left_REAR.setmotor(_SHORT_BRAKE);
-    Right_FRONT.setmotor(_SHORT_BRAKE);
-    Right_REAR.setmotor(_SHORT_BRAKE);
+    Left_FRONT.setmotor(_STANDBY);
+    Left_REAR.setmotor(_STANDBY);
+    Right_FRONT.setmotor(_STANDBY);
+    Right_REAR.setmotor(_STANDBY);
     client.println("Track STOP");
     display.ttyPrintln("Track STOP");
     display.display();
@@ -284,29 +289,30 @@ void ModeHandle() {
     display.ttyPrintln("=>[ModeHandle]");
     display.display();
     while (1) {
-        // if (client.available()) {  //客戶端有發送，則接收
         readBuff = client.readStringUntil('\r');
         readBuff.trim();
+        client.print("[readBuff]=>");
         client.println(readBuff);
         if (readBuff.startsWith("STOP")) {
             readBuff = "";
             break;  //若接收到STOP則跳出ModeHandle迴圈
         }
-        //}
         if (readBuff.startsWith("RIGHT")) {
             readBuff_subStr = readBuff.substring(5);  //尋找從索引位置到末端的字符串
             readBuff_Int = readBuff_subStr.toInt();
             if (readBuff_Int > 0) {
                 Right_FRONT.setmotor(_CCW, readBuff_Int);
                 Right_REAR.setmotor(_CCW, readBuff_Int);
-            } else {
+            } else if (readBuff_Int < 0) {
                 readBuff_Int = -readBuff_Int;
                 Right_FRONT.setmotor(_CW, readBuff_Int);
                 Right_REAR.setmotor(_CW, readBuff_Int);
+            } else {
+                Left_FRONT.setmotor(_STANDBY);
+                Left_REAR.setmotor(_STANDBY);
+                Right_FRONT.setmotor(_STANDBY);
+                Right_REAR.setmotor(_STANDBY);
             }
-            client.print("RIGHT:");
-            client.print(readBuff_subStr);
-            client.println("..");
             readBuff = "";
         } else if (readBuff.startsWith("LEFT")) {
             readBuff_subStr = readBuff.substring(4);  //尋找從索引位置到末端的字符串
@@ -314,54 +320,58 @@ void ModeHandle() {
             if (readBuff_Int > 0) {
                 Left_FRONT.setmotor(_CW, readBuff_Int);
                 Left_REAR.setmotor(_CW, readBuff_Int);
-            } else {
+            } else if (readBuff_Int < 0) {
                 readBuff_Int = -readBuff_Int;
                 Left_FRONT.setmotor(_CCW, readBuff_Int);
                 Left_REAR.setmotor(_CCW, readBuff_Int);
+            } else {
+                Left_FRONT.setmotor(_STANDBY);
+                Left_REAR.setmotor(_STANDBY);
+                Right_FRONT.setmotor(_STANDBY);
+                Right_REAR.setmotor(_STANDBY);
             }
-            client.print("LEFT:");
-            client.print(readBuff_subStr);
-            client.println("..");
             readBuff = "";
         }
     }
-    Left_FRONT.setmotor(_SHORT_BRAKE);
-    Left_REAR.setmotor(_SHORT_BRAKE);
-    Right_FRONT.setmotor(_SHORT_BRAKE);
-    Right_REAR.setmotor(_SHORT_BRAKE);
+    Left_FRONT.setmotor(_STANDBY);
+    Left_REAR.setmotor(_STANDBY);
+    Right_FRONT.setmotor(_STANDBY);
+    Right_REAR.setmotor(_STANDBY);
     client.println("Handle STOP");
     display.ttyPrintln("Handle STOP");
     display.display();
 }
 /*========================================
 
-            Setup & Loop
+    Setup & Loop
 
 ========================================*/
 void setup() {
     Serial.begin(115200);
     Wire.setClock(400000);
-    Left_FRONT.setmotor(_SHORT_BRAKE);
-    Left_REAR.setmotor(_SHORT_BRAKE);
-    Right_FRONT.setmotor(_SHORT_BRAKE);
-    Right_REAR.setmotor(_SHORT_BRAKE);
     OLEDinit();
-    delay(1000);
+    delay(250);
     ServoDriverinit();
-    delay(1000);
+    delay(250);
     IRinit();
-    delay(1000);
+    delay(250);
     WIFIinit();
-    delay(1000);
+    delay(250);
 }
 
 void loop() {
-    client = TCPclient_server.available();
-    if (client) {  //提示客戶端已連接
-        display.ttyPrintln("=>[client connented]");
+    display.ttyPrintln("Waiting for Connection");
+    display.display();
+    while (!client) {  //  等待連接
+        client = TCPclient_server.available();
+        delay(250);
+        display.ttyPrint("@");
         display.display();
-        client.println("=>[client connented]");
     }
+    display.ttyPrintln("");
+    display.ttyPrintln("=>[client connented]");  //提示客戶端已連接
+    display.display();
+    client.println("=>[client connented]");
     while (client.connected()) {  //如果客戶端處於連接狀態
         if (client.available()) {
             readBuff = client.readStringUntil('\r');
@@ -372,14 +382,26 @@ void loop() {
             } else if (readBuff.startsWith("HANDLE")) {
                 ModeHandle();
             } else if (readBuff.startsWith("RESTART")) {
-                client.println("RESTART! ");
-                display.ttyPrintln("RESTART! ");
+                client.println("RESTART...");
+                display.ttyPrintln("RESTART...");
                 display.display();
-                client.println("--");
-                display.ttyPrintln("--");
+                client.println("---");
+                display.ttyPrintln("---");
                 display.display();
+                delay(250);
                 ESP.restart();
             }
         }
     }
+    Left_FRONT.setmotor(_STANDBY);
+    Left_REAR.setmotor(_STANDBY);
+    Right_FRONT.setmotor(_STANDBY);
+    Right_REAR.setmotor(_STANDBY);
+    display.ttyPrintln("=>[client lost]");
+    display.display();
+    display.ttyPrintln("RESTART...");
+    display.ttyPrintln("---");
+    display.display();
+    delay(250);
+    ESP.restart();
 }
