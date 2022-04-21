@@ -20,6 +20,8 @@ Motor Left_FRONT(0x2E, _MOTOR_A, 1000);   // LeftFront
 Motor Left_REAR(0x2E, _MOTOR_B, 1000);    // LeftRear
 Motor Right_FRONT(0x30, _MOTOR_B, 1000);  // RightFront
 Motor Right_REAR(0x30, _MOTOR_A, 1000);   // RightRear
+// Steer為Y軸陀螺儀讀取值
+int Slide_Speed = 0, Steer = 0, Calculate_Speed = 0;
 /*[------------------------------------------------]
 
     OLED Display 0.96" I2C 128x64 white (SSD1306)
@@ -61,8 +63,7 @@ void OLEDinit() {
 const char* ssid = "ご注文はWIFIですか?";
 const char* password = "111111111";
 const char compile_date[] = __DATE__ " " __TIME__;  // Provided by compiler at compile time.
-String readBuff = "";                               //客戶端讀取用緩存
-String readBuff_subStr = "";
+String readBuff = "", readBuff_subStr = "";         //客戶端讀取用緩存
 int readBuff_Int = 0;
 int WifiTryCount = 0;
 WiFiServer TCPclient_server(443);  //聲明服務器對象
@@ -176,24 +177,34 @@ void calc_pid() {
     previous_error = error;
 }
 
-void WheelSpeed(int speedL, int speedR) {  //速度设定范围(-100,100)
-    if (speedR > 0) {
-        Left_FRONT.setmotor(_CCW, speedR);
-        Left_REAR.setmotor(_CCW, speedR);
+void WheelSpeed(int speedL, int speedR) {  //速度設定範圍(-100,100)
+    if (speedL > 0) {
+        Left_FRONT.setmotor(_CW, speedL);
+        Left_REAR.setmotor(_CW, speedL);
 
+    } else if (speedL < 0) {
+        speedL = -speedL;
+        Left_FRONT.setmotor(_CCW, speedL);
+        Left_REAR.setmotor(_CCW, speedL);
     } else {
-        speedR = -speedR;
-        Left_FRONT.setmotor(_CW, speedR);
-        Left_REAR.setmotor(_CW, speedR);
+        Left_FRONT.setmotor(_STANDBY);
+        Left_REAR.setmotor(_STANDBY);
+        Right_FRONT.setmotor(_STANDBY);
+        Right_REAR.setmotor(_STANDBY);
     }
 
-    if (speedL > 0) {
-        Right_FRONT.setmotor(_CW, speedL);
-        Right_REAR.setmotor(_CW, speedL);
+    if (speedR > 0) {
+        Right_FRONT.setmotor(_CCW, speedR);
+        Right_REAR.setmotor(_CCW, speedR);
+    } else if (speedR < 0) {
+        speedR = -speedR;
+        Right_FRONT.setmotor(_CW, speedR);
+        Right_REAR.setmotor(_CW, speedR);
     } else {
-        speedL = -speedL;
-        Right_FRONT.setmotor(_CCW, speedL);
-        Right_REAR.setmotor(_CCW, speedL);
+        Left_FRONT.setmotor(_STANDBY);
+        Left_REAR.setmotor(_STANDBY);
+        Right_FRONT.setmotor(_STANDBY);
+        Right_REAR.setmotor(_STANDBY);
     }
 }
 void Tracking() {
@@ -257,7 +268,7 @@ void ServoDriverinit() {
     Mode
 
 [------------------------------------------------]*/
-void ModeAuto() {
+void ModeAuto() {  //循跡模式
     client.println("=>[ModeAuto]");
     display.ttyPrintln("=>[ModeAuto]");
     display.display();
@@ -284,7 +295,7 @@ void ModeAuto() {
     display.ttyPrintln("Track STOP");
     display.display();
 }
-void ModeHandle() {
+void ModeHandle() {  //手動模式(加速度計)
     client.println("=>[ModeHandle]");
     display.ttyPrintln("=>[ModeHandle]");
     display.display();
@@ -296,49 +307,29 @@ void ModeHandle() {
         if (readBuff.startsWith("STOP")) {
             readBuff = "";
             break;  //若接收到STOP則跳出ModeHandle迴圈
+        } else if (readBuff.startsWith("SPEED")) {
+            readBuff_subStr = readBuff.substring(5);
+            Slide_Speed = readBuff_subStr.toInt();  //讀取滑桿速度值作為主速度
+            readBuff = "";
+        } else if (readBuff.startsWith("STEER")) {
+            readBuff_subStr = readBuff.substring(5);
+            Steer = readBuff_subStr.toInt();
+            readBuff = "";
         }
-        if (readBuff.startsWith("RIGHT")) {
-            readBuff_subStr = readBuff.substring(5);  //尋找從索引位置到末端的字符串
-            readBuff_Int = readBuff_subStr.toInt();
-            if (readBuff_Int > 0) {
-                Right_FRONT.setmotor(_CCW, readBuff_Int);
-                Right_REAR.setmotor(_CCW, readBuff_Int);
-            } else if (readBuff_Int < 0) {
-                readBuff_Int = -readBuff_Int;
-                Right_FRONT.setmotor(_CW, readBuff_Int);
-                Right_REAR.setmotor(_CW, readBuff_Int);
-            } else {
-                Left_FRONT.setmotor(_STANDBY);
-                Left_REAR.setmotor(_STANDBY);
-                Right_FRONT.setmotor(_STANDBY);
-                Right_REAR.setmotor(_STANDBY);
-            }
-            readBuff = "";
-        } else if (readBuff.startsWith("LEFT")) {
-            readBuff_subStr = readBuff.substring(4);  //尋找從索引位置到末端的字符串
-            readBuff_Int = readBuff_subStr.toInt();
-            if (readBuff_Int > 0) {
-                Left_FRONT.setmotor(_CW, readBuff_Int);
-                Left_REAR.setmotor(_CW, readBuff_Int);
-            } else if (readBuff_Int < 0) {
-                readBuff_Int = -readBuff_Int;
-                Left_FRONT.setmotor(_CCW, readBuff_Int);
-                Left_REAR.setmotor(_CCW, readBuff_Int);
-            } else {
-                Left_FRONT.setmotor(_STANDBY);
-                Left_REAR.setmotor(_STANDBY);
-                Right_FRONT.setmotor(_STANDBY);
-                Right_REAR.setmotor(_STANDBY);
-            }
-            readBuff = "";
+        if (Steer >= 0) {  //右轉時，左輪為滑桿速度，右輪為計算速度
+            Calculate_Speed = round(Slide_Speed - (Slide_Speed * Steer / 50));
+            WheelSpeed(Slide_Speed, Calculate_Speed);
+        } else if (Steer < 0) {  //左轉時，左輪為計算速度，右輪為滑桿速度
+            Calculate_Speed = round(Slide_Speed - (Slide_Speed * (-Steer) / 50));
+            WheelSpeed(Calculate_Speed, Slide_Speed);
         }
     }
     Left_FRONT.setmotor(_STANDBY);
     Left_REAR.setmotor(_STANDBY);
     Right_FRONT.setmotor(_STANDBY);
     Right_REAR.setmotor(_STANDBY);
-    client.println("Handle STOP");
-    display.ttyPrintln("Handle STOP");
+    client.println("Stop Handle!");
+    display.ttyPrintln("Stop Handle!");
     display.display();
 }
 /*========================================
@@ -360,24 +351,23 @@ void setup() {
 }
 
 void loop() {
-    display.ttyPrintln("Waiting for Connection");
+    display.ttyPrintln("WaitingForConnection");
     display.display();
     while (!client) {  //  等待連接
         client = TCPclient_server.available();
-        delay(250);
-        display.ttyPrint("@");
+        delay(500);
+        display.ttyPrint("#");
         display.display();
     }
     display.ttyPrintln("");
-    display.ttyPrintln("=>[client connented]");  //提示客戶端已連接
+    display.ttyPrintln("=>[Client connented]");  //提示客戶端已連接
     display.display();
-    client.println("=>[client connented]");
+    client.println("=>[Client connented]");
     while (client.connected()) {  //如果客戶端處於連接狀態
         if (client.available()) {
             readBuff = client.readStringUntil('\r');
-            readBuff.trim();  //消除多於空白
-            // Mode
-            if (readBuff.startsWith("AUTO")) {
+            readBuff.trim();                    //消除多於空白
+            if (readBuff.startsWith("AUTO")) {  // 模式切換
                 ModeAuto();
             } else if (readBuff.startsWith("HANDLE")) {
                 ModeHandle();
