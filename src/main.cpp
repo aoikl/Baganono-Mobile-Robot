@@ -33,10 +33,10 @@ int Slide_Speed = 0, Steer = 0, Calculate_Speed = 0;
 #include <SPI.h>
 #include <Wire.h>
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
-void OLEDinit() {
+void OLED_Init() {
     display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
     display.display();
-    for (int i = 0; i < 10; i++) {
+    for (int i = 0; i < 10; i++) {  //強制開機時先停止馬達，避免重啟後馬達失控
         Left_FRONT.setmotor(_STANDBY);
         Left_REAR.setmotor(_STANDBY);
         Right_FRONT.setmotor(_STANDBY);
@@ -69,7 +69,7 @@ int WifiTryCount = 0;
 WiFiServer TCPclient_server(443);  //聲明服務器對象
 WiFiClient client = TCPclient_server.available();
 AsyncWebServer OTA_server(80);
-void WIFIinit() {
+void WIFI_Init() {
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);  //关闭STA模式下wifi休眠，提高响应速度
     WiFi.disconnect();
@@ -104,6 +104,15 @@ void WIFIinit() {
     display.ttyPrintln("WIFI Init!");
     display.display();
 }
+/*[-----------------------------------------------]
+
+    Electromagnet Module
+
+[------------------------------------------------]*/
+#define Solenoid_PIN 33
+void SOLENOID_Init() {
+    pinMode(Solenoid_PIN, OUTPUT);
+}
 /*[------------------------------------------------]
 
     Infrared Tracking Sensor Module 5 Channel (TCRT5000)
@@ -115,11 +124,11 @@ void WIFIinit() {
 #define righA_track_PIN 39
 #define righB_track_PIN 36
 int sensor[5];                                        //= {1, 1, 1, 1, 1};
-float Kp = 10, Ki = 0.5, Kd = 0;                      // pid弯道参数参数
-float error = 0, P = 0, I = 0, D = 0, PID_value = 0;  // pid直道参数
-float previous_error = 0, previous_I = 0;             //误差值
+float Kp = 10, Ki = 0.5, Kd = 0;                      // pid彎道參數
+float error = 0, P = 0, I = 0, D = 0, PID_value = 0;  // pid直到參數
+float previous_error = 0, previous_I = 0;             //誤差值
 int initial_motor_speed = 60;
-void IRinit() {
+void IR_Init() {
     pinMode(leftA_track_PIN, INPUT);
     pinMode(leftB_track_PIN, INPUT);
     pinMode(middle_track_PIN, INPUT);
@@ -128,7 +137,7 @@ void IRinit() {
     display.ttyPrintln("IR Init!");
     display.display();
 }
-void read_sensor_values() {
+void Read_sensor_values() {
     sensor[0] = digitalRead(leftA_track_PIN);
     sensor[1] = digitalRead(leftB_track_PIN);
     sensor[2] = digitalRead(middle_track_PIN);
@@ -169,7 +178,7 @@ void read_sensor_values() {
     client.print(", ");
     client.println(sensor[4]);
 }
-void calc_pid() {
+void Calc_pid() {
     P = error;
     I = I + error;
     D = error - previous_error;
@@ -189,8 +198,6 @@ void WheelSpeed(int speedL, int speedR) {  //速度設定範圍(-100,100)
     } else {
         Left_FRONT.setmotor(_STANDBY);
         Left_REAR.setmotor(_STANDBY);
-        Right_FRONT.setmotor(_STANDBY);
-        Right_REAR.setmotor(_STANDBY);
     }
 
     if (speedR > 0) {
@@ -201,8 +208,6 @@ void WheelSpeed(int speedL, int speedR) {  //速度設定範圍(-100,100)
         Right_FRONT.setmotor(_CW, speedR);
         Right_REAR.setmotor(_CW, speedR);
     } else {
-        Left_FRONT.setmotor(_STANDBY);
-        Left_REAR.setmotor(_STANDBY);
         Right_FRONT.setmotor(_STANDBY);
         Right_REAR.setmotor(_STANDBY);
     }
@@ -224,44 +229,80 @@ void Tracking() {
         right_motor_speed = -100;
     }
     WheelSpeed(left_motor_speed, right_motor_speed);
-    display.ttyPrint("L:");
-    display.ttyPrint(String(right_motor_speed));
-    display.ttyPrint(", ");
-    display.ttyPrint("R:");
-    display.ttyPrint(String(left_motor_speed));
-    display.ttyPrint(", ");
-    display.ttyPrint("er:");
-    display.ttyPrintln(String(error));
-    display.display();
-    display.ttyPrint("P:");
-    display.ttyPrint(String(P));
-    display.ttyPrint(", ");
-    display.ttyPrint("I:");
-    display.ttyPrint(String(I));
-    display.ttyPrint(", ");
-    display.ttyPrint("D:");
-    display.ttyPrintln(String(D));
-    display.ttyPrint("PID:");
-    display.ttyPrintln(String(PID_value));
-    display.display();
+    client.print("L:" + right_motor_speed);
+    client.print(", ");
+    client.print("R:" + left_motor_speed);
+    client.print(", ");
+    client.print("er:");
+    client.println(error);
+    client.print("P:");
+    client.print(P);
+    client.print(", ");
+    client.print("I:");
+    client.print(I);
+    client.print(", ");
+    client.print("D:");
+    client.println(D);
+    client.print("PID:");
+    client.println(PID_value);
 }
 /*[-----------------------------------------------]
 
     Adafruit 16-Channel Servo Driver (PCA9685)
 
 [------------------------------------------------]*/
-#include <Adafruit_PWMServoDriver.h>
-Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();  // default address 0x40
-#define MIN_PULSE_WIDTH 544
-#define MAX_PULSE_WIDTH 2400
-#define FREQUENCY 50
-int pulse_wide, pulse_width;
-int ServoMotor0 = 0;  // 0~15 channels
-void ServoDriverinit() {
-    pwm.begin();
-    pwm.setPWMFreq(FREQUENCY);
-    display.ttyPrintln("Servo Driver Init!");
-    display.display();
+#include "HCPCA9685.h"
+int ServoChannel = 0, Servo_Speed = 0;
+HCPCA9685 PCA9685(0x40);
+/*
+当于0.5/20*4096=102的寄存器值。以此类推如下：
+0.5ms————–0度：0.5/20*4096 = 102
+1.0ms————45度：1/20*4096 = 204
+1.5ms————90度：1.5/20*4096 = 306
+2.0ms———–135度：2/20*4096 = 408
+2.5ms———–180度：2.5/20*4096 =510
+
+但是实际使用的时候，还是有偏差，除了0度以及180度，其他需要乘以0.915系数。最后的寄存器值如下：
+0.5ms————–0度：0.5/20*4096 = 102
+1.0ms————45度：1/20*4096 = 204 * 0.915 = 187
+1.5ms————90度：1.5/20*4096 = 306 * 0.915 = 280
+2.0ms———–135度：2/20*4096 = 408 * 0.915 = 373
+2.5ms———–180度：2.5/20*4096 =510
+*/
+void Servo_Init() {
+    PCA9685.Init(SERVO_MODE);
+    PCA9685.Sleep(false);
+}
+
+void ServoTurn(int _ServoChannel, int Servo_Speed) {
+    if (Servo_Speed >= 0) {
+        Servo_Speed = map(Servo_Speed, 0, 100, 280, 510);
+    } else {
+        Servo_Speed = map(Servo_Speed, -100, 0, 102, 280);
+    }
+    switch (_ServoChannel) {
+        case 12:  //小夾爪
+            PCA9685.Servo(1, Servo_Speed);
+            PCA9685.Servo(2, Servo_Speed);
+            break;
+        case 3:
+            PCA9685.Servo(3, Servo_Speed);
+            break;
+        case 4:
+            PCA9685.Servo(4, Servo_Speed);
+            break;
+        case 45:
+            PCA9685.Servo(4, Servo_Speed);
+            PCA9685.Servo(5, (280 - (Servo_Speed - 280)));
+            break;
+        case 67:  //大球夾爪
+            PCA9685.Servo(6, Servo_Speed);
+            PCA9685.Servo(7, (280 - (Servo_Speed - 280)));
+            break;
+        case 8:
+            PCA9685.Servo(8, Servo_Speed);
+            break;
+    }
 }
 /*[-----------------------------------------------]
 
@@ -283,16 +324,16 @@ void ModeAuto() {  //循跡模式
             readBuff = "";
         }
         client.println("Tracking...");
-        read_sensor_values();
-        calc_pid();
+        Read_sensor_values();
+        Calc_pid();
         Tracking();
     }
     Left_FRONT.setmotor(_STANDBY);
     Left_REAR.setmotor(_STANDBY);
     Right_FRONT.setmotor(_STANDBY);
     Right_REAR.setmotor(_STANDBY);
-    client.println("Track STOP");
-    display.ttyPrintln("Track STOP");
+    client.println("=>[Track STOP]");
+    display.ttyPrintln("=>[Track STOP]");
     display.display();
 }
 void ModeHandle() {  //手動模式(加速度計)
@@ -301,9 +342,8 @@ void ModeHandle() {  //手動模式(加速度計)
     display.display();
     while (1) {
         readBuff = client.readStringUntil('\r');
-        readBuff.trim();
-        client.print("[readBuff]=>");
-        client.println(readBuff);
+        // readBuff.trim();
+        client.print(readBuff + '\r');
         if (readBuff.startsWith("STOP")) {
             readBuff = "";
             break;  //若接收到STOP則跳出ModeHandle迴圈
@@ -314,6 +354,15 @@ void ModeHandle() {  //手動模式(加速度計)
         } else if (readBuff.startsWith("STEER")) {
             readBuff_subStr = readBuff.substring(5);
             Steer = readBuff_subStr.toInt();
+            readBuff = "";
+        } else if (readBuff.startsWith("SERVO")) {
+            readBuff_subStr = readBuff.substring(5);
+            ServoChannel = readBuff_subStr.toInt();
+            ServoTurn(ServoChannel, Steer);
+            readBuff = "";
+        } else if (readBuff.startsWith("MAGNET")) {
+            readBuff_subStr = readBuff.substring(6);
+            digitalWrite(Solenoid_PIN, readBuff_subStr.toInt());
             readBuff = "";
         }
         if (Steer >= 0) {  //右轉時，左輪為滑桿速度，右輪為計算速度
@@ -328,8 +377,8 @@ void ModeHandle() {  //手動模式(加速度計)
     Left_REAR.setmotor(_STANDBY);
     Right_FRONT.setmotor(_STANDBY);
     Right_REAR.setmotor(_STANDBY);
-    client.println("Stop Handle!");
-    display.ttyPrintln("Stop Handle!");
+    client.println("=>[STOP Handle]");
+    display.ttyPrintln("=>[STOP Handle]");
     display.display();
 }
 /*========================================
@@ -340,13 +389,15 @@ void ModeHandle() {  //手動模式(加速度計)
 void setup() {
     Serial.begin(115200);
     Wire.setClock(400000);
-    OLEDinit();
+    OLED_Init();
     delay(250);
-    ServoDriverinit();
+    Servo_Init();
     delay(250);
-    IRinit();
+    SOLENOID_Init();
     delay(250);
-    WIFIinit();
+    IR_Init();
+    delay(250);
+    WIFI_Init();
     delay(250);
 }
 
@@ -366,20 +417,11 @@ void loop() {
     while (client.connected()) {  //如果客戶端處於連接狀態
         if (client.available()) {
             readBuff = client.readStringUntil('\r');
-            readBuff.trim();                    //消除多於空白
+            // readBuff.trim();                    //消除多於空白
             if (readBuff.startsWith("AUTO")) {  // 模式切換
                 ModeAuto();
             } else if (readBuff.startsWith("HANDLE")) {
                 ModeHandle();
-            } else if (readBuff.startsWith("RESTART")) {
-                client.println("RESTART...");
-                display.ttyPrintln("RESTART...");
-                display.display();
-                client.println("---");
-                display.ttyPrintln("---");
-                display.display();
-                delay(250);
-                ESP.restart();
             }
         }
     }
@@ -387,7 +429,7 @@ void loop() {
     Left_REAR.setmotor(_STANDBY);
     Right_FRONT.setmotor(_STANDBY);
     Right_REAR.setmotor(_STANDBY);
-    display.ttyPrintln("=>[client lost]");
+    display.ttyPrintln("=>[Client lost]");
     display.display();
     display.ttyPrintln("RESTART...");
     display.ttyPrintln("---");
