@@ -40,8 +40,8 @@ REASON WHATSOEVER.
    their end-stops, or are not able to rotate to the min or max ends of the
    servo. */
 
-#define SERVO_TRIM_MIN 102
-#define SERVO_TRIM_MAX 510
+#define SERVO_TRIM_MIN 110
+#define SERVO_TRIM_MAX 530
 
 /* If using an external clock change this value to match the clocks frequency
    in Hz */

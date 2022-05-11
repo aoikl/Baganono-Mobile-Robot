@@ -15,6 +15,7 @@ Period: 5
     WeMos D1 Mini Motor Drive Shield (TB6612)
 
 [------------------------------------------------]*/
+#include <Arduino.h>
 #include "WEMOS_Motor.h"
 Motor Left_FRONT(0x2E, _MOTOR_A, 1000);   // LeftFront
 Motor Left_REAR(0x2E, _MOTOR_B, 1000);    // LeftRear
@@ -29,14 +30,13 @@ int Slide_Speed = 0, Steer = 0, Calculate_Speed = 0;
 [------------------------------------------------]*/
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include <Arduino.h>
 #include <SPI.h>
 #include <Wire.h>
 Adafruit_SSD1306 display(128, 64, &Wire, -1);
 void OLED_Init() {
     display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
     display.display();
-    for (int i = 0; i < 10; i++) {  //強制開機時先停止馬達，避免重啟後馬達失控
+    for (uint8_t i = 0; i < 10; i++) {  //強制開機時先停止馬達，避免重啟後馬達失控
         Left_FRONT.setmotor(_STANDBY);
         Left_REAR.setmotor(_STANDBY);
         Right_FRONT.setmotor(_STANDBY);
@@ -62,16 +62,16 @@ void OLED_Init() {
 #include <WiFi.h>
 const char* ssid = "ご注文はWIFIですか?";
 const char* password = "111111111";
-const char compile_date[] = __DATE__ " " __TIME__;  // Provided by compiler at compile time.
-String readBuff = "", readBuff_subStr = "";         //客戶端讀取用緩存
-int readBuff_Int = 0;
-int WifiTryCount = 0;
+const char compile_date[] = __DATE__ " " __TIME__;                  // Provided by compiler at compile time.
+String readBuff = "", readBuff_subStr = "", readBuff_subStr2 = "";  //客戶端讀取用緩存
+int readBuff_Int = 0, readBuff_Int2 = 0;
+uint8_t WifiTryCount = 0;
 WiFiServer TCPclient_server(443);  //聲明服務器對象
 WiFiClient client = TCPclient_server.available();
 AsyncWebServer OTA_server(80);
 void WIFI_Init() {
     WiFi.mode(WIFI_STA);
-    WiFi.setSleep(false);  //关闭STA模式下wifi休眠，提高响应速度
+    WiFi.setSleep(false);  //關閉STA模式下WIFI休眠，提高響應速度
     WiFi.disconnect();
     delay(250);
     WiFi.begin(ssid, password);
@@ -89,7 +89,6 @@ void WIFI_Init() {
     display.println("[Connected]");
     display.println("Compile timestamp: ");
     display.println(compile_date);
-    display.println("");
     display.println("IP address:");
     display.print(WiFi.localIP());
     display.print(":");
@@ -125,7 +124,7 @@ void SOLENOID_Init() {
 #define righB_track_PIN 36
 int sensor[5];                                        //= {1, 1, 1, 1, 1};
 float Kp = 10, Ki = 0.5, Kd = 0;                      // pid彎道參數
-float error = 0, P = 0, I = 0, D = 0, PID_value = 0;  // pid直到參數
+float error = 0, P = 0, I = 0, D = 0, PID_value = 0;  // pid直道參數
 float previous_error = 0, previous_I = 0;             //誤差值
 int initial_motor_speed = 60;
 void IR_Init() {
@@ -252,7 +251,7 @@ void Tracking() {
 
 [------------------------------------------------]*/
 #include "HCPCA9685.h"
-int ServoChannel = 0, Servo_Speed = 0;
+int ServoChannel = 0, ServoPosition = 0;
 HCPCA9685 PCA9685(0x40);
 /*
 当于0.5/20*4096=102的寄存器值。以此类推如下：
@@ -274,33 +273,34 @@ void Servo_Init() {
     PCA9685.Sleep(false);
 }
 
-void ServoTurn(int _ServoChannel, int Servo_Speed) {
-    if (Servo_Speed >= 0) {
-        Servo_Speed = map(Servo_Speed, 0, 100, 280, 510);
-    } else {
-        Servo_Speed = map(Servo_Speed, -100, 0, 102, 280);
-    }
+void ServoTurn(int _ServoChannel, int _ServoPosition) {
+    _ServoPosition = map(_ServoPosition, -90, 90, 0, 420);
     switch (_ServoChannel) {
-        case 12:  //小夾爪
-            PCA9685.Servo(1, Servo_Speed);
-            PCA9685.Servo(2, Servo_Speed);
+        case 0:
+            for (int chan = 1; chan < 15; chan++) {
+                PCA9685.Servo(chan, 210);
+            }
+            break;
+        case 1:  //小夾爪
+            PCA9685.Servo(1, _ServoPosition);
+            PCA9685.Servo(2, (210 - (_ServoPosition - 210)));
             break;
         case 3:
-            PCA9685.Servo(3, Servo_Speed);
+            PCA9685.Servo(3, _ServoPosition);
             break;
         case 4:
-            PCA9685.Servo(4, Servo_Speed);
+            PCA9685.Servo(4, _ServoPosition);
             break;
-        case 45:
-            PCA9685.Servo(4, Servo_Speed);
-            PCA9685.Servo(5, (280 - (Servo_Speed - 280)));
+        case 5:
+            PCA9685.Servo(4, _ServoPosition);
+            PCA9685.Servo(5, (320 - (_ServoPosition - 320)));
             break;
-        case 67:  //大球夾爪
-            PCA9685.Servo(6, Servo_Speed);
-            PCA9685.Servo(7, (280 - (Servo_Speed - 280)));
+        case 6:  //大球夾爪
+            PCA9685.Servo(6, _ServoPosition);
+            PCA9685.Servo(7, (320 - (_ServoPosition - 320)));
             break;
         case 8:
-            PCA9685.Servo(8, Servo_Speed);
+            PCA9685.Servo(8, _ServoPosition);
             break;
     }
 }
@@ -313,7 +313,7 @@ void ModeAuto() {  //循跡模式
     client.println("=>[ModeAuto]");
     display.ttyPrintln("=>[ModeAuto]");
     display.display();
-    while (1) {
+    while (client.connected()) {
         if (client.available()) {
             readBuff = client.readStringUntil('\r');
             readBuff.trim();
@@ -340,37 +340,41 @@ void ModeHandle() {  //手動模式(加速度計)
     client.println("=>[ModeHandle]");
     display.ttyPrintln("=>[ModeHandle]");
     display.display();
-    while (1) {
-        readBuff = client.readStringUntil('\r');
-        // readBuff.trim();
-        client.print(readBuff + '\r');
-        if (readBuff.startsWith("STOP")) {
-            readBuff = "";
-            break;  //若接收到STOP則跳出ModeHandle迴圈
-        } else if (readBuff.startsWith("SPEED")) {
-            readBuff_subStr = readBuff.substring(5);
-            Slide_Speed = readBuff_subStr.toInt();  //讀取滑桿速度值作為主速度
-            readBuff = "";
-        } else if (readBuff.startsWith("STEER")) {
-            readBuff_subStr = readBuff.substring(5);
-            Steer = readBuff_subStr.toInt();
-            readBuff = "";
-        } else if (readBuff.startsWith("SERVO")) {
-            readBuff_subStr = readBuff.substring(5);
-            ServoChannel = readBuff_subStr.toInt();
-            ServoTurn(ServoChannel, Steer);
-            readBuff = "";
-        } else if (readBuff.startsWith("MAGNET")) {
-            readBuff_subStr = readBuff.substring(6);
-            digitalWrite(Solenoid_PIN, readBuff_subStr.toInt());
-            readBuff = "";
-        }
-        if (Steer >= 0) {  //右轉時，左輪為滑桿速度，右輪為計算速度
-            Calculate_Speed = round(Slide_Speed - (Slide_Speed * Steer / 50));
-            WheelSpeed(Slide_Speed, Calculate_Speed);
-        } else if (Steer < 0) {  //左轉時，左輪為計算速度，右輪為滑桿速度
-            Calculate_Speed = round(Slide_Speed - (Slide_Speed * (-Steer) / 50));
-            WheelSpeed(Calculate_Speed, Slide_Speed);
+    while (client.connected()) {
+        if (client.available()) {
+            readBuff = client.readStringUntil('\r');
+            // readBuff.trim();
+            client.print(readBuff + '\r');
+            if (readBuff.startsWith("STOP")) {
+                readBuff = "";
+                break;  //若接收到STOP則跳出ModeHandle迴圈
+            } else if (readBuff.startsWith("SPEED")) {
+                readBuff_subStr = readBuff.substring(5);
+                Slide_Speed = readBuff_subStr.toInt();  //讀取滑桿速度值作為主速度
+                readBuff = "";
+            } else if (readBuff.startsWith("STEER")) {
+                readBuff_subStr = readBuff.substring(5);
+                Steer = readBuff_subStr.toInt();
+                readBuff = "";
+            } else if (readBuff.startsWith("SERVO")) {
+                readBuff_subStr = readBuff.substring(5, 6);
+                readBuff_subStr2 = readBuff.substring(7);
+                ServoChannel = readBuff_subStr.toInt();
+                ServoPosition = readBuff_subStr2.toInt();
+                ServoTurn(ServoChannel, ServoPosition);
+                readBuff = "";
+            } else if (readBuff.startsWith("MAGNET")) {
+                readBuff_subStr = readBuff.substring(6);
+                digitalWrite(Solenoid_PIN, readBuff_subStr.toInt());
+                readBuff = "";
+            }
+            if (Steer >= 0) {  //右轉時，左輪為滑桿速度，右輪為計算速度
+                Calculate_Speed = round(Slide_Speed - (Slide_Speed * Steer / 50));
+                WheelSpeed(Slide_Speed, Calculate_Speed);
+            } else if (Steer < 0) {  //左轉時，左輪為計算速度，右輪為滑桿速度
+                Calculate_Speed = round(Slide_Speed - (Slide_Speed * (-Steer) / 50));
+                WheelSpeed(Calculate_Speed, Slide_Speed);
+            }
         }
     }
     Left_FRONT.setmotor(_STANDBY);
@@ -429,6 +433,7 @@ void loop() {
     Left_REAR.setmotor(_STANDBY);
     Right_FRONT.setmotor(_STANDBY);
     Right_REAR.setmotor(_STANDBY);
+    PCA9685.Sleep(true);
     display.ttyPrintln("=>[Client lost]");
     display.display();
     display.ttyPrintln("RESTART...");
