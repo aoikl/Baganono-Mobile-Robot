@@ -37,10 +37,10 @@ void OLED_Init() {
     display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
     display.display();
     for (uint8_t i = 0; i < 10; i++) {  //強制開機時先停止馬達，避免重啟後馬達失控
-        Left_FRONT.setmotor(_STANDBY);
-        Left_REAR.setmotor(_STANDBY);
-        Right_FRONT.setmotor(_STANDBY);
-        Right_REAR.setmotor(_STANDBY);
+        Left_FRONT.setmotor(_SHORT_BRAKE);
+        Left_REAR.setmotor(_SHORT_BRAKE);
+        Right_FRONT.setmotor(_SHORT_BRAKE);
+        Right_REAR.setmotor(_SHORT_BRAKE);
         delay(100);
     }
     display.clearDisplay();
@@ -69,7 +69,9 @@ uint8_t WifiTryCount = 0;
 WiFiServer TCPclient_server(443);  //聲明服務器對象
 WiFiClient client = TCPclient_server.available();
 AsyncWebServer OTA_server(80);
+#define LED_BUTTON 2
 void WIFI_Init() {
+    pinMode(LED_BUTTON, OUTPUT);
     WiFi.mode(WIFI_STA);
     WiFi.setSleep(false);  //關閉STA模式下WIFI休眠，提高響應速度
     WiFi.disconnect();
@@ -87,8 +89,6 @@ void WIFI_Init() {
     display.clearDisplay();
     display.setCursor(0, 0);
     display.println("[Connected]");
-    display.println("Compile timestamp: ");
-    display.println(compile_date);
     display.println("IP address:");
     display.print(WiFi.localIP());
     display.print(":");
@@ -102,6 +102,23 @@ void WIFI_Init() {
     TCPclient_server.setNoDelay(true);
     display.ttyPrintln("WIFI Init!");
     display.display();
+    display.ttyPrintln("WaitingForConnection");
+    display.display();
+    while (!client) {  //  等待連接
+        client = TCPclient_server.available();
+        delay(300);
+        display.ttyPrint("#");
+        display.display();
+        digitalWrite(LED_BUTTON, HIGH);
+        delay(300);
+        digitalWrite(LED_BUTTON, LOW);
+        delay(300);
+    }
+    delay(100);
+    digitalWrite(LED_BUTTON, LOW);
+    client.println("=>[Client connented]");
+    client.println("Compile timestamp: ");
+    client.println(compile_date);
 }
 /*[-----------------------------------------------]
 
@@ -123,10 +140,10 @@ void SOLENOID_Init() {
 #define righA_track_PIN 39
 #define righB_track_PIN 36
 int sensor[5];                                        //= {1, 1, 1, 1, 1};
-float Kp = 10, Ki = 0.5, Kd = 0;                      // pid彎道參數
+float Kp = 43, Ki = 29, Kd = 0;                       // pid彎道參數
 float error = 0, P = 0, I = 0, D = 0, PID_value = 0;  // pid直道參數
 float previous_error = 0, previous_I = 0;             //誤差值
-int initial_motor_speed = 60;
+int initial_motor_speed = 28;
 void IR_Init() {
     pinMode(leftA_track_PIN, INPUT);
     pinMode(leftB_track_PIN, INPUT);
@@ -144,27 +161,25 @@ void Read_sensor_values() {
     sensor[4] = digitalRead(righB_track_PIN);
 
     if (sensor[0] == 0 && sensor[1] != 0 && sensor[2] != 0 && sensor[3] != 0 && sensor[4] != 0) {
-        error = -2;
+        error = 2;  // 01111
     } else if (sensor[0] == 0 && sensor[1] == 0 && sensor[2] != 0 && sensor[3] != 0 && sensor[4] != 0) {
-        error = -2;
+        error = 2;  // 00111
     } else if (sensor[1] == 0 && sensor[0] != 0 && sensor[2] != 0 && sensor[3] != 0 && sensor[4] != 0) {
-        error = -1;
+        error = 1;  // 10111
     } else if (sensor[1] == 0 && sensor[0] != 0 && sensor[2] == 0 && sensor[3] != 0 && sensor[4] != 0) {
-        error = -1;
+        error = 1;  // 10011
     } else if (sensor[2] == 0 && sensor[1] != 0 && sensor[0] != 0 && sensor[3] != 0 && sensor[4] != 0) {
-        error = 0;
-    } else if (sensor[2] == 0 && sensor[1] == 0 && sensor[0] != 0 && sensor[3] == 0 && sensor[4] != 0) {
-        error = 0;
+        error = 0;  // 11011
     } else if (sensor[3] == 0 && sensor[1] != 0 && sensor[2] != 0 && sensor[0] != 0 && sensor[4] != 0) {
-        error = 1;
+        error = -1;  // 11101
     } else if (sensor[3] == 0 && sensor[1] != 0 && sensor[2] == 0 && sensor[0] != 0 && sensor[4] != 0) {
-        error = 1;
+        error = -1;  // 11001
     } else if (sensor[4] == 0 && sensor[1] != 0 && sensor[2] != 0 && sensor[3] == 0 && sensor[0] != 0) {
-        error = 2;
+        error = -2;  // 11100
     } else if (sensor[4] == 0 && sensor[1] != 0 && sensor[2] != 0 && sensor[3] != 0 && sensor[0] != 0) {
-        error = 2;
-    } else {
-        error = 0;
+        error = -2;  // 11110
+    } else if (sensor[4] != 0 && sensor[1] != 0 && sensor[2] != 0 && sensor[3] != 0 && sensor[0] != 0) {
+        error = 0;  // 11111
     }
     client.print("Sensor: ");
     client.print(sensor[0]);
@@ -195,8 +210,8 @@ void WheelSpeed(int speedL, int speedR) {  //速度設定範圍(-100,100)
         Left_FRONT.setmotor(_CCW, speedL);
         Left_REAR.setmotor(_CCW, speedL);
     } else {
-        Left_FRONT.setmotor(_STANDBY);
-        Left_REAR.setmotor(_STANDBY);
+        Left_FRONT.setmotor(_SHORT_BRAKE);
+        Left_REAR.setmotor(_SHORT_BRAKE);
     }
 
     if (speedR > 0) {
@@ -207,10 +222,11 @@ void WheelSpeed(int speedL, int speedR) {  //速度設定範圍(-100,100)
         Right_FRONT.setmotor(_CW, speedR);
         Right_REAR.setmotor(_CW, speedR);
     } else {
-        Right_FRONT.setmotor(_STANDBY);
-        Right_REAR.setmotor(_STANDBY);
+        Right_FRONT.setmotor(_SHORT_BRAKE);
+        Right_REAR.setmotor(_SHORT_BRAKE);
     }
 }
+
 void Tracking() {
     int left_motor_speed = initial_motor_speed - PID_value;
     int right_motor_speed = initial_motor_speed + PID_value;
@@ -231,9 +247,6 @@ void Tracking() {
     client.print("L:" + right_motor_speed);
     client.print(", ");
     client.print("R:" + left_motor_speed);
-    client.print(", ");
-    client.print("er:");
-    client.println(error);
     client.print("P:");
     client.print(P);
     client.print(", ");
@@ -242,8 +255,6 @@ void Tracking() {
     client.print(", ");
     client.print("D:");
     client.println(D);
-    client.print("PID:");
-    client.println(PID_value);
 }
 /*[-----------------------------------------------]
 
@@ -254,14 +265,14 @@ void Tracking() {
 int ServoChannel = 0, ServoPosition = 0;
 HCPCA9685 PCA9685(0x40);
 /*
-当于0.5/20*4096=102的寄存器值。以此类推如下：
+由於0.5/20*4096=102的寄存器值。角度如下：
 0.5ms————–0度：0.5/20*4096 = 102
 1.0ms————45度：1/20*4096 = 204
 1.5ms————90度：1.5/20*4096 = 306
 2.0ms———–135度：2/20*4096 = 408
 2.5ms———–180度：2.5/20*4096 =510
 
-但是实际使用的时候，还是有偏差，除了0度以及180度，其他需要乘以0.915系数。最后的寄存器值如下：
+因實際使用的偏差，除了0度以及180度，其他需要乘以0.915係數。最後寄存器值如下：
 0.5ms————–0度：0.5/20*4096 = 102
 1.0ms————45度：1/20*4096 = 204 * 0.915 = 187
 1.5ms————90度：1.5/20*4096 = 306 * 0.915 = 280
@@ -276,31 +287,32 @@ void Servo_Init() {
 void ServoTurn(int _ServoChannel, int _ServoPosition) {
     _ServoPosition = map(_ServoPosition, -90, 90, 0, 420);
     switch (_ServoChannel) {
+        //全部歸零
         case 0:
             for (int chan = 1; chan < 15; chan++) {
                 PCA9685.Servo(chan, 210);
+                delay(10);
             }
             break;
-        case 1:  //小夾爪
+        //大球夾爪
+        case 1:
             PCA9685.Servo(1, _ServoPosition);
-            PCA9685.Servo(2, (210 - (_ServoPosition - 210)));
             break;
+        case 2:
+            PCA9685.Servo(2, _ServoPosition);
+            break;
+        //小夾爪
         case 3:
-            PCA9685.Servo(3, _ServoPosition);
+            PCA9685.Servo(12, _ServoPosition);
             break;
         case 4:
-            PCA9685.Servo(4, _ServoPosition);
+            PCA9685.Servo(13, _ServoPosition);
             break;
         case 5:
-            PCA9685.Servo(4, _ServoPosition);
-            PCA9685.Servo(5, (320 - (_ServoPosition - 320)));
+            PCA9685.Servo(14, _ServoPosition);
             break;
-        case 6:  //大球夾爪
-            PCA9685.Servo(6, _ServoPosition);
-            PCA9685.Servo(7, (320 - (_ServoPosition - 320)));
-            break;
-        case 8:
-            PCA9685.Servo(8, _ServoPosition);
+        case 6:
+            PCA9685.Servo(15, (_ServoPosition));
             break;
     }
 }
@@ -310,6 +322,8 @@ void ServoTurn(int _ServoChannel, int _ServoPosition) {
 
 [------------------------------------------------]*/
 void ModeAuto() {  //循跡模式
+    error = P = I = D = PID_value = 0;
+    previous_error = previous_I = 0;
     client.println("=>[ModeAuto]");
     display.ttyPrintln("=>[ModeAuto]");
     display.display();
@@ -323,19 +337,19 @@ void ModeAuto() {  //循跡模式
             }
             readBuff = "";
         }
-        client.println("Tracking...");
         Read_sensor_values();
         Calc_pid();
         Tracking();
     }
-    Left_FRONT.setmotor(_STANDBY);
-    Left_REAR.setmotor(_STANDBY);
-    Right_FRONT.setmotor(_STANDBY);
-    Right_REAR.setmotor(_STANDBY);
+    Left_FRONT.setmotor(_SHORT_BRAKE);
+    Left_REAR.setmotor(_SHORT_BRAKE);
+    Right_FRONT.setmotor(_SHORT_BRAKE);
+    Right_REAR.setmotor(_SHORT_BRAKE);
     client.println("=>[Track STOP]");
     display.ttyPrintln("=>[Track STOP]");
     display.display();
 }
+
 void ModeHandle() {  //手動模式(加速度計)
     client.println("=>[ModeHandle]");
     display.ttyPrintln("=>[ModeHandle]");
@@ -343,7 +357,6 @@ void ModeHandle() {  //手動模式(加速度計)
     while (client.connected()) {
         if (client.available()) {
             readBuff = client.readStringUntil('\r');
-            // readBuff.trim();
             client.print(readBuff + '\r');
             if (readBuff.startsWith("STOP")) {
                 readBuff = "";
@@ -363,9 +376,11 @@ void ModeHandle() {  //手動模式(加速度計)
                 ServoPosition = readBuff_subStr2.toInt();
                 ServoTurn(ServoChannel, ServoPosition);
                 readBuff = "";
-            } else if (readBuff.startsWith("MAGNET")) {
-                readBuff_subStr = readBuff.substring(6);
-                digitalWrite(Solenoid_PIN, readBuff_subStr.toInt());
+            } else if (readBuff.startsWith("MAGNET0")) {
+                digitalWrite(Solenoid_PIN, LOW);
+                readBuff = "";
+            } else if (readBuff.startsWith("MAGNET1")) {
+                digitalWrite(Solenoid_PIN, HIGH);
                 readBuff = "";
             }
             if (Steer >= 0) {  //右轉時，左輪為滑桿速度，右輪為計算速度
@@ -377,10 +392,10 @@ void ModeHandle() {  //手動模式(加速度計)
             }
         }
     }
-    Left_FRONT.setmotor(_STANDBY);
-    Left_REAR.setmotor(_STANDBY);
-    Right_FRONT.setmotor(_STANDBY);
-    Right_REAR.setmotor(_STANDBY);
+    Left_FRONT.setmotor(_SHORT_BRAKE);
+    Left_REAR.setmotor(_SHORT_BRAKE);
+    Right_FRONT.setmotor(_SHORT_BRAKE);
+    Right_REAR.setmotor(_SHORT_BRAKE);
     client.println("=>[STOP Handle]");
     display.ttyPrintln("=>[STOP Handle]");
     display.display();
@@ -406,33 +421,43 @@ void setup() {
 }
 
 void loop() {
-    display.ttyPrintln("WaitingForConnection");
-    display.display();
-    while (!client) {  //  等待連接
-        client = TCPclient_server.available();
-        delay(500);
-        display.ttyPrint("#");
-        display.display();
-    }
-    display.ttyPrintln("");
-    display.ttyPrintln("=>[Client connented]");  //提示客戶端已連接
-    display.display();
-    client.println("=>[Client connented]");
     while (client.connected()) {  //如果客戶端處於連接狀態
         if (client.available()) {
             readBuff = client.readStringUntil('\r');
-            // readBuff.trim();                    //消除多於空白
             if (readBuff.startsWith("AUTO")) {  // 模式切換
                 ModeAuto();
             } else if (readBuff.startsWith("HANDLE")) {
                 ModeHandle();
+            } else if (readBuff.startsWith("KP")) {
+                readBuff_subStr = readBuff.substring(2);
+                Kp = readBuff_subStr.toFloat();
+                client.println(Kp);
+                readBuff = "";
+
+            } else if (readBuff.startsWith("KI")) {
+                readBuff_subStr = readBuff.substring(2);
+                Ki = readBuff_subStr.toFloat();
+                client.println(Ki);
+                readBuff = "";
+
+            } else if (readBuff.startsWith("KD")) {
+                readBuff_subStr = readBuff.substring(2);
+                Kd = readBuff_subStr.toFloat();
+                client.println(Kd);
+                readBuff = "";
+
+            } else if (readBuff.startsWith("TSPEED")) {
+                readBuff_subStr = readBuff.substring(6);
+                initial_motor_speed = readBuff_subStr.toInt();
+                client.println(initial_motor_speed);
+                readBuff = "";
             }
         }
     }
-    Left_FRONT.setmotor(_STANDBY);
-    Left_REAR.setmotor(_STANDBY);
-    Right_FRONT.setmotor(_STANDBY);
-    Right_REAR.setmotor(_STANDBY);
+    Left_FRONT.setmotor(_SHORT_BRAKE);
+    Left_REAR.setmotor(_SHORT_BRAKE);
+    Right_FRONT.setmotor(_SHORT_BRAKE);
+    Right_REAR.setmotor(_SHORT_BRAKE);
     PCA9685.Sleep(true);
     display.ttyPrintln("=>[Client lost]");
     display.display();
